@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Image Detector</title>
+<meta name="description" content="Upload or capture a photo and see how closely it matches objects detected by three YOLO11 models.">
+<meta name="theme-color" content="#0b3b3a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+  :root {
+    --bg:#f3f6f6; --surface:#ffffff; --ink:#10201f; --muted:#5d6f6e; --line:#dde6e5;
+    --brand:#0f766e; --brand-2:#14b8a6; --brand-ink:#ffffff;
+    --good:#16a34a; --warn:#d97706; --bad:#64748b;
+    --hero1:#0b3b3a; --hero2:#0f766e; --shadow:0 10px 30px rgba(11,59,58,.10);
+    --radius:18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0c1413; --surface:#142120; --ink:#eaf4f3; --muted:#92a8a6; --line:#223533;
+      --brand:#2dd4bf; --brand-2:#5eead4; --brand-ink:#05211e;
+      --good:#4ade80; --warn:#fbbf24; --bad:#94a3b8;
+      --hero1:#07201f; --hero2:#0d4f4a; --shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1040px; margin:0 auto; padding:0 18px; }
+
+  /* Top bar */
+  header.top { position:sticky; top:0; z-index:20; backdrop-filter:blur(12px);
+    background:color-mix(in srgb, var(--hero1) 92%, transparent); color:#fff;
+    padding-top:env(safe-area-inset-top); }
+  header.top .wrap { display:flex; align-items:center; justify-content:space-between; height:58px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.2px; }
+  .brand svg { width:30px; height:30px; }
+  .install { border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.10); color:#fff;
+    padding:8px 14px; border-radius:999px; font-weight:600; font-size:.9rem; cursor:pointer; }
+  .install:hover { background:rgba(255,255,255,.2); }
+  .install[hidden] { display:none; }
+
+  /* Hero */
+  .hero { background:radial-gradient(1200px 400px at 80% -10%, rgba(45,212,191,.35), transparent 60%),
+          linear-gradient(135deg,var(--hero1),var(--hero2)); color:#fff; padding:44px 0 92px; }
+  .hero h1 { font-size:clamp(1.9rem,5vw,3rem); line-height:1.1; margin:0 0 12px; letter-spacing:-.02em; }
+  .hero p { margin:0; max-width:560px; font-size:1.05rem; color:rgba(255,255,255,.85); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+  .chip { display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:999px;
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); font-size:.85rem; font-weight:500; }
+  .chip i { width:7px; height:7px; border-radius:50%; background:#5eead4; display:inline-block; }
+
+  main { margin-top:-64px; padding-bottom:40px; position:relative; z-index:2; }
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:22px; }
+
+  /* Drop zone */
+  .drop { border:2px dashed color-mix(in srgb, var(--brand) 55%, var(--line)); border-radius:16px;
+    padding:34px 18px; text-align:center; transition:.2s; background:color-mix(in srgb, var(--brand) 5%, transparent); }
+  .drop.over { background:color-mix(in srgb, var(--brand) 14%, transparent); border-color:var(--brand); transform:scale(1.01); }
+  .drop .icon { width:58px; height:58px; margin:0 auto 10px; border-radius:16px; display:grid; place-items:center;
+    background:linear-gradient(135deg,var(--brand),var(--brand-2)); color:var(--brand-ink); }
+  .drop h2 { margin:0 0 4px; font-size:1.2rem; }
+  .drop p { margin:0 0 18px; color:var(--muted); font-size:.95rem; }
+  .btns { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .btn { appearance:none; border:0; border-radius:12px; padding:13px 20px; font-size:1rem; font-weight:700;
+    cursor:pointer; display:inline-flex; align-items:center; gap:9px; transition:transform .1s, box-shadow .2s; font-family:inherit; }
+  .btn:active { transform:scale(.97); }
+  .btn.primary { background:linear-gradient(135deg,var(--brand),var(--brand-2)); color:var(--brand-ink);
+    box-shadow:0 6px 16px color-mix(in srgb, var(--brand) 35%, transparent); }
+  .btn.ghost { background:transparent; color:var(--brand); border:2px solid var(--brand); }
+  .btn svg { width:20px; height:20px; }
+  input[type=file] { display:none; }
+
+  /* Progress */
+  #progress { display:none; margin-top:18px; }
+  #progress .row { display:flex; justify-content:space-between; font-size:.9rem; color:var(--muted); margin-bottom:8px; }
+  .track { height:8px; background:var(--line); border-radius:99px; overflow:hidden; }
+  .track > span { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--brand),var(--brand-2)); transition:width .3s; border-radius:99px; }
+
+  /* Results */
+  #results { display:none; margin-top:22px; }
+  .summary { display:grid; grid-template-columns:auto 1fr; gap:22px; align-items:center; }
+  .ring { --p:0; width:132px; height:132px; border-radius:50%; position:relative;
+    background:conic-gradient(var(--ringc,var(--good)) calc(var(--p)*1%), var(--line) 0); display:grid; place-items:center; }
+  .ring::before { content:""; position:absolute; inset:11px; background:var(--surface); border-radius:50%; }
+  .ring b { position:relative; font-size:1.7rem; letter-spacing:-.02em; }
+  .ring small { position:relative; display:block; font-size:.7rem; color:var(--muted); text-align:center; margin-top:-4px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
+  .ring .in { position:relative; text-align:center; }
+  .verdict h3 { margin:0 0 4px; font-size:1.3rem; }
+  .verdict p { margin:0; color:var(--muted); }
+  .badge { display:inline-block; padding:4px 11px; border-radius:99px; font-size:.78rem; font-weight:700; margin-bottom:8px;
+    background:color-mix(in srgb, var(--bc,var(--good)) 16%, transparent); color:var(--bc,var(--good)); }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin-top:20px; }
+  .mcard { border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--surface); display:flex; flex-direction:column; }
+  .mcard .head { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid var(--line); }
+  .mcard .head b { font-size:.98rem; }
+  .tag { font-size:.72rem; font-weight:700; padding:3px 9px; border-radius:99px;
+    background:color-mix(in srgb, var(--tc,var(--bad)) 16%, transparent); color:var(--tc,var(--bad)); }
+  .mcard canvas { width:100%; height:auto; display:block; background:#000; }
+  .mcard .body { padding:12px 14px 14px; }
+  .line { display:flex; justify-content:space-between; font-weight:600; margin-bottom:6px; }
+  .bar { height:8px; background:var(--line); border-radius:99px; overflow:hidden; margin-bottom:10px; }
+  .bar > span { display:block; height:100%; background:var(--good); border-radius:99px; }
+  .nomatch { color:var(--muted); margin:2px 0 0; }
+  .skeleton { height:160px; background:linear-gradient(90deg,var(--line),transparent,var(--line)); background-size:200% 100%; animation:sh 1.2s infinite; }
+  @keyframes sh { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  .explain { margin-top:22px; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+  .explain div { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .explain h4 { margin:0 0 6px; font-size:.95rem; }
+  .explain p { margin:0; color:var(--muted); font-size:.9rem; }
+  .num { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:8px; margin-bottom:8px;
+    background:color-mix(in srgb, var(--brand) 16%, transparent); color:var(--brand); font-weight:800; font-size:.85rem; }
+
+  footer { border-top:1px solid var(--line); padding:22px 0 calc(22px + env(safe-area-inset-bottom)); color:var(--muted); font-size:.88rem; text-align:center; }
+  footer a { color:var(--brand); text-decoration:none; font-weight:600; }
+
+  @media (max-width:560px) {
+    .hero { padding:32px 0 84px; }
+    .panel { padding:16px; }
+    .summary { grid-template-columns:1fr; justify-items:center; text-align:center; }
+    .btns .btn { flex:1 1 100%; justify-content:center; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#14b8a6"/>
+        <path d="M8 13V9h4M24 13V9h-4M8 19v4h4M24 19v4h-4" stroke="#05211e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="16" cy="16" r="2.6" fill="#05211e"/>
+      </svg>
+      Image Detector
+    </div>
+    <button class="install" id="btnInstall" hidden>Install app</button>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <h1>Detect and match objects<br>in any photo</h1>
+    <p>Upload an image or take a photo. Three YOLO11 models trained on custom annotated data check it and report how confident they are.</p>
+    <div class="chips">
+      <span class="chip"><i></i>3 trained models</span>
+      <span class="chip"><i></i>Runs on your device</span>
+      <span class="chip"><i></i>Works on web and mobile</span>
+    </div>
+  </div>
+</section>
+
+<main>
+  <div class="wrap">
+    <div class="panel">
+      <div class="drop" id="drop">
+        <div class="icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        </div>
+        <h2>Add an image to check</h2>
+        <p>Drag and drop here, choose a file, or use your camera. JPG and PNG work best.</p>
+        <div class="btns">
+          <button class="btn primary" id="btnCamera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            Take photo
+          </button>
+          <button class="btn ghost" id="btnUpload">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
+            Choose image
+          </button>
+        </div>
+      </div>
+      <input type="file" id="fileCamera" accept="image/*" capture="environment">
+      <input type="file" id="fileUpload" accept="image/*">
+
+      <div id="progress">
+        <div class="row"><span id="progText">Preparing...</span><span id="progPct">0%</span></div>
+        <div class="track"><span id="progBar"></span></div>
+      </div>
+
+      <div id="results">
+        <div class="summary">
+          <div class="ring" id="ring"><div class="in"><b id="ringNum">0%</b><small>best match</small></div></div>
+          <div class="verdict">
+            <span class="badge" id="badge">Result</span>
+            <h3 id="vTitle">Checking...</h3>
+            <p id="vText"></p>
+          </div>
+        </div>
+        <div class="grid" id="grid"></div>
+      </div>
+    </div>
+
+    <div class="explain">
+      <div><span class="num">1</span><h4>Add a photo</h4><p>Upload from your gallery or take a new one with the camera.</p></div>
+      <div><span class="num">2</span><h4>Three models check it</h4><p>Each YOLO11 model looks for the object it was trained on.</p></div>
+      <div><span class="num">3</span><h4>See the match</h4><p>The percentage is the model's confidence, not a pixel-by-pixel comparison.</p></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    Built by Francis, Pentecost University College &middot; YOLO11 models trained on Ultralytics Platform<br>
+    <a href="https://github.com/budugyampo-108/yolo-detector-vercel" target="_blank" rel="noopener">GitHub repository</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://yolo-detector-nzc5uxpdfnkw5ncdjledzf.streamlit.app" target="_blank" rel="noopener">Streamlit version</a>
+    <br><span style="font-size:.8rem">Images are processed on your device and never uploaded.</span>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script>
+/* ---------- Settings you can change ---------- */
+const CLASS_NAMES = ["Francis"];         // class name shown for detections
+const CONF_THRESHOLD = 0.25;
+const IOU_THRESHOLD = 0.45;
+const SIZE = 640;
+const MODELS = [
+  { name: "Model 1", sub: "exp-5", file: "models/exp5.onnx" },
+  { name: "Model 2", sub: "exp-6", file: "models/exp6.onnx" },
+  { name: "Model 3", sub: "exp-8", file: "models/exp8.onnx" },
+];
+/* --------------------------------------------- */
+
+ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+ort.env.wasm.numThreads = 1;
+
+const $ = id => document.getElementById(id);
+const sessions = {};
+let busy = false;
+
+async function getSession(m) {
+  if (!sessions[m.file]) sessions[m.file] = await ort.InferenceSession.create(m.file, { executionProviders: ["wasm"] });
+  return sessions[m.file];
+}
+
+function letterbox(img) {
+  const c = document.createElement("canvas");
+  c.width = c.height = SIZE;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "rgb(114,114,114)";
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  const scale = Math.min(SIZE / img.width, SIZE / img.height);
+  const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+  const px = Math.floor((SIZE - w) / 2), py = Math.floor((SIZE - h) / 2);
+  ctx.drawImage(img, px, py, w, h);
+  const d = ctx.getImageData(0, 0, SIZE, SIZE).data;
+  const n = SIZE * SIZE, f = new Float32Array(3 * n);
+  for (let i = 0; i < n; i++) {
+    f[i] = d[i * 4] / 255; f[n + i] = d[i * 4 + 1] / 255; f[2 * n + i] = d[i * 4 + 2] / 255;
+  }
+  return { tensor: new ort.Tensor("float32", f, [1, 3, SIZE, SIZE]), scale, px, py };
+}
+
+function iou(a, b) {
+  const x1 = Math.max(a.x1, b.x1), y1 = Math.max(a.y1, b.y1), x2 = Math.min(a.x2, b.x2), y2 = Math.min(a.y2, b.y2);
+  const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const ua = (a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - inter;
+  return ua <= 0 ? 0 : inter / ua;
+}
+
+function decode(output, lb, W, H) {
+  const dims = output.dims, N = dims[2], nc = dims[1] - 4, data = output.data, boxes = [];
+  for (let i = 0; i < N; i++) {
+    let best = -1, score = 0;
+    for (let c = 0; c < nc; c++) { const s = data[(4 + c) * N + i]; if (s > score) { score = s; best = c; } }
+    if (score < CONF_THRESHOLD) continue;
+    const cx = data[i], cy = data[N + i], w = data[2 * N + i], h = data[3 * N + i];
+    boxes.push({
+      x1: Math.max(0, (cx - w / 2 - lb.px) / lb.scale), y1: Math.max(0, (cy - h / 2 - lb.py) / lb.scale),
+      x2: Math.min(W, (cx + w / 2 - lb.px) / lb.scale), y2: Math.min(H, (cy + h / 2 - lb.py) / lb.scale),
+      score, cls: best
+    });
+  }
+  boxes.sort((a, b) => b.score - a.score);
+  const keep = [];
+  for (const b of boxes) if (keep.every(k => k.cls !== b.cls || iou(k, b) < IOU_THRESHOLD)) keep.push(b);
+  return keep;
+}
+
+function draw(img, dets) {
+  const c = document.createElement("canvas");
+  c.width = img.width; c.height = img.height;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  const lw = Math.max(3, Math.round(img.width / 190)), fs = Math.max(14, Math.round(img.width / 36));
+  ctx.lineWidth = lw; ctx.font = `700 ${fs}px system-ui, sans-serif`; ctx.textBaseline = "top";
+  for (const d of dets) {
+    ctx.strokeStyle = "#14b8a6";
+    ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+    const label = `${CLASS_NAMES[d.cls] || "object"} ${(d.score * 100).toFixed(0)}%`;
+    const tw = ctx.measureText(label).width + 14, th = fs + 10, ty = Math.max(0, d.y1 - th);
+    ctx.fillStyle = "#14b8a6"; ctx.fillRect(d.x1, ty, tw, th);
+    ctx.fillStyle = "#04201d"; ctx.fillText(label, d.x1 + 7, ty + 5);
+  }
+  return c;
+}
+
+function loadImage(file) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error("This file could not be read as an image."));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function scaleDown(raw) {
+  const k = Math.min(1, 1600 / Math.max(raw.width, raw.height));
+  if (k >= 1) return raw;
+  const c = document.createElement("canvas");
+  c.width = Math.round(raw.width * k); c.height = Math.round(raw.height * k);
+  c.getContext("2d").drawImage(raw, 0, 0, c.width, c.height);
+  return c;
+}
+
+function setProgress(text, pct) {
+  $("progText").textContent = text;
+  $("progPct").textContent = Math.round(pct) + "%";
+  $("progBar").style.width = pct + "%";
+}
+
+function verdict(best) {
+  if (best <= 0) return { c: "var(--bad)", badge: "No match", title: "Nothing recognised", text: "None of the trained models found the object in this image." };
+  if (best >= 70) return { c: "var(--good)", badge: "Strong match", title: "This image matches what was trained", text: "At least one model is highly confident that the trained object is in this image." };
+  if (best >= 40) return { c: "var(--warn)", badge: "Possible match", title: "Partly matches the trained images", text: "The models see some similarity, but they are not very sure. Try a clearer or closer photo." };
+  return { c: "var(--warn)", badge: "Weak match", title: "Low confidence", text: "The models found a faint resemblance. The result may not be reliable." };
+}
+
+async function handleFile(file) {
+  if (!file || busy) return;
+  busy = true;
+  const grid = $("grid");
+  $("results").style.display = "none";
+  $("progress").style.display = "block";
+  grid.innerHTML = "";
+  try {
+    setProgress("Reading image...", 4);
+    const img = scaleDown(await loadImage(file));
+    const W = img.width, H = img.height;
+    const lb = letterbox(img);
+
+    $("results").style.display = "block";
+    $("ringNum").textContent = "...";
+    $("ring").style.setProperty("--p", 0);
+    $("badge").textContent = "Analysing"; $("badge").style.setProperty("--bc", "var(--brand)");
+    $("vTitle").textContent = "Checking your image..."; $("vText").textContent = "";
+
+    const cards = MODELS.map(m => {
+      const el = document.createElement("div");
+      el.className = "mcard";
+      el.innerHTML = `<div class="head"><b>${m.name} <span style="color:var(--muted);font-weight:500">(${m.sub})</span></b><span class="tag">Waiting</span></div><div class="skeleton"></div>`;
+      grid.appendChild(el);
+      return el;
+    });
+    $("results").scrollIntoView({ behavior: "smooth", block: "start" });
+
+    let best = 0;
+    for (let i = 0; i < MODELS.length; i++) {
+      const m = MODELS[i], el = cards[i];
+      setProgress(`Running ${m.name} of ${MODELS.length}${i === 0 ? " (first run loads the models)" : ""}...`, 8 + (i / MODELS.length) * 88);
+      await new Promise(r => setTimeout(r, 30));
+      const head = `<div class="head"><b>${m.name} <span style="color:var(--muted);font-weight:500">(${m.sub})</span></b>`;
+      try {
+        const sess = await getSession(m);
+        const feeds = {}; feeds[sess.inputNames[0]] = lb.tensor;
+        const out = await sess.run(feeds);
+        const dets = decode(out[sess.outputNames[0]], lb, W, H);
+        if (!dets.length) {
+          el.innerHTML = head + `<span class="tag" style="--tc:var(--bad)">No match</span></div>` +
+            `<div class="body"><div class="line"><span>Confidence</span><span>0%</span></div><div class="bar"><span style="width:0"></span></div><p class="nomatch">Nothing recognised by this model.</p></div>`;
+        } else {
+          const top = dets[0].score * 100;
+          best = Math.max(best, top);
+          el.innerHTML = head + `<span class="tag" style="--tc:var(--good)">${dets.length} found</span></div>`;
+          el.appendChild(draw(img, dets));
+          const body = document.createElement("div");
+          body.className = "body";
+          body.innerHTML = dets.map(d => {
+            const p = (d.score * 100).toFixed(1);
+            return `<div class="line"><span>${CLASS_NAMES[d.cls] || "object"}</span><span>${p}%</span></div><div class="bar"><span style="width:${p}%"></span></div>`;
+          }).join("");
+          el.appendChild(body);
+        }
+      } catch (e) {
+        el.innerHTML = head + `<span class="tag" style="--tc:var(--warn)">Error</span></div><div class="body"><p class="nomatch">Could not run this model. ${e.message}</p></div>`;
+      }
+    }
+
+    const v = verdict(best);
+    $("ring").style.setProperty("--ringc", v.c);
+    $("ring").style.setProperty("--p", best);
+    $("ringNum").textContent = best.toFixed(0) + "%";
+    $("badge").textContent = v.badge; $("badge").style.setProperty("--bc", v.c);
+    $("vTitle").textContent = v.title; $("vText").textContent = v.text;
+    setProgress("Done", 100);
+    setTimeout(() => { $("progress").style.display = "none"; }, 700);
+  } catch (e) {
+    setProgress("Error: " + e.message, 0);
+  } finally { busy = false; }
+}
+
+$("btnCamera").onclick = () => $("fileCamera").click();
+$("btnUpload").onclick = () => $("fileUpload").click();
+for (const id of ["fileCamera", "fileUpload"]) $(id).onchange = e => { handleFile(e.target.files[0]); e.target.value = ""; };
+
+const drop = $("drop");
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => handleFile(e.dataTransfer.files[0]));
+
+let deferred;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferred = e; $("btnInstall").hidden = false; });
+$("btnInstall").onclick = async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice; deferred = null; $("btnInstall").hidden = true; };
+
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+</script>
+</body>
+</html>
