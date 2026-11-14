@@ -23,6 +23,6 @@ python -m http.server 8000
 Open http://localhost:8000
 
 ## Live app
-ADD YOUR VERCEL LINK HERE
+https://yolo-detector-vercel.vercel.app/
 
-Author: Francis, Pentecost University College
+Author: Francis Budu Gyampo, Pentecost University 
