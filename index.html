@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Image Detector</title>
-<meta name="description" content="Upload or capture a photo and see how closely it matches objects detected by three YOLO11 models.">
+<meta name="description" content="Upload or capture a photo and see how closely it matches objects detected by a trained YOLO11 model.">
 <meta name="theme-color" content="#0b3b3a">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
@@ -120,6 +120,14 @@
   .num { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:8px; margin-bottom:8px;
     background:color-mix(in srgb, var(--brand) 16%, transparent); color:var(--brand); font-weight:800; font-size:.85rem; }
 
+
+  #samples { margin-top:22px; }
+  #samples .sh h3 { margin:0 0 2px; font-size:1.05rem; }
+  #samples .sh p { margin:0 0 12px; color:var(--muted); font-size:.9rem; }
+  .sgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; }
+  .sgrid button { padding:0; border:2px solid var(--line); border-radius:12px; overflow:hidden; cursor:pointer; background:var(--surface); aspect-ratio:1; transition:.15s; }
+  .sgrid button:hover, .sgrid button:focus-visible { border-color:var(--brand); transform:translateY(-2px); outline:none; }
+  .sgrid img { width:100%; height:100%; object-fit:cover; display:block; }
   footer { border-top:1px solid var(--line); padding:22px 0 calc(22px + env(safe-area-inset-bottom)); color:var(--muted); font-size:.88rem; text-align:center; }
   footer a { color:var(--brand); text-decoration:none; font-weight:600; }
 
@@ -150,9 +158,9 @@
 <section class="hero">
   <div class="wrap">
     <h1>Detect and match objects<br>in any photo</h1>
-    <p>Upload an image or take a photo. Three YOLO11 models trained on custom annotated data check it and report how confident they are.</p>
+    <p>Upload an image or take a photo. A YOLO11 model trained on custom annotated photos checks it and reports how confident it is.</p>
     <div class="chips">
-      <span class="chip"><i></i>3 trained models</span>
+      <span class="chip"><i></i>Custom-trained YOLO11</span>
       <span class="chip"><i></i>Runs on your device</span>
       <span class="chip"><i></i>Works on web and mobile</span>
     </div>
@@ -182,6 +190,12 @@
       <input type="file" id="fileCamera" accept="image/*" capture="environment">
       <input type="file" id="fileUpload" accept="image/*">
 
+      <div id="samples" hidden>
+        <div class="sh"><h3>Try a sample photo</h3><p>Tap a photo to run the detector on it. Useful for testing without uploading.</p></div>
+        <div class="sgrid" id="sgrid"></div>
+      </div>
+
+
       <div id="progress">
         <div class="row"><span id="progText">Preparing...</span><span id="progPct">0%</span></div>
         <div class="track"><span id="progBar"></span></div>
@@ -202,7 +216,7 @@
 
     <div class="explain">
       <div><span class="num">1</span><h4>Add a photo</h4><p>Upload from your gallery or take a new one with the camera.</p></div>
-      <div><span class="num">2</span><h4>Three models check it</h4><p>Each YOLO11 model looks for the object it was trained on.</p></div>
+      <div><span class="num">2</span><h4>The model checks it</h4><p>The YOLO11 model looks for the object it was trained on.</p></div>
       <div><span class="num">3</span><h4>See the match</h4><p>The percentage is the model's confidence, not a pixel-by-pixel comparison.</p></div>
     </div>
   </div>
@@ -226,9 +240,16 @@ const CONF_THRESHOLD = 0.25;
 const IOU_THRESHOLD = 0.45;
 const SIZE = 640;
 const MODELS = [
-  { name: "Model 1", sub: "exp-5", file: "models/exp5.onnx" },
-  { name: "Model 2", sub: "exp-6", file: "models/exp6.onnx" },
-  { name: "Model 3", sub: "exp-8", file: "models/exp8.onnx" },
+  { name: "YOLO11 model", sub: "exp-5", file: "models/exp5.onnx" },
+];
+/* Sample photos stored in the repo (folder: samples/). Add or remove file names here. */
+const SAMPLES = [
+  "samples/sample1.jpg",
+  "samples/sample2.jpg",
+  "samples/sample3.jpg",
+  "samples/sample4.jpg",
+  "samples/sample5.jpg",
+  "samples/sample6.jpg",
 ];
 /* --------------------------------------------- */
 
@@ -418,6 +439,31 @@ const drop = $("drop");
 ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => handleFile(e.dataTransfer.files[0]));
+
+
+/* Sample gallery: only shows photos that exist in the samples folder */
+async function loadSamples() {
+  const grid = $("sgrid");
+  let shown = 0;
+  for (const url of SAMPLES) {
+    try {
+      const r = await fetch(url, { method: "GET" });
+      if (!r.ok || !(r.headers.get("content-type") || "").startsWith("image/")) continue;
+      const blob = await r.blob();
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Test sample photo " + (shown + 1));
+      const im = document.createElement("img");
+      im.src = URL.createObjectURL(blob); im.alt = "Sample photo " + (shown + 1);
+      btn.appendChild(im);
+      btn.onclick = () => handleFile(new File([blob], url.split("/").pop(), { type: blob.type }));
+      grid.appendChild(btn);
+      shown++;
+    } catch (e) { /* skip missing sample */ }
+  }
+  if (shown) $("samples").hidden = false;
+}
+loadSamples();
 
 let deferred;
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferred = e; $("btnInstall").hidden = false; });

@@ -6,14 +6,15 @@ where it can be installed to the home screen and can use the camera.
 
 ## Features
 - Upload an image or take a photo with the phone camera
-- Three models run on the image; each reports its confidence percentage
+- The model reports its confidence percentage
 - "No match (0%)" when nothing trained is detected
 - Installable (PWA), no image leaves the device
 
 ## Structure
 - `index.html` - the app (interface and detection code)
 - `manifest.json`, `sw.js`, `icons/` - PWA files
-- `models/` - `exp5.onnx`, `exp6.onnx`, `exp8.onnx`
+- `models/` - `exp5.onnx`
+- `samples/` - sample photos for quick testing
 - `vercel.json` - hosting settings
 
 ## Run locally
